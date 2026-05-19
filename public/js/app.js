@@ -65,13 +65,16 @@ ARC.ui.toast = (type, title, msg) => {
 // ═══ WALLET ═══
 ARC.wallet.connect = async () => {
   if (state.wallet.connected) { ARC.ui.toast('info','Already Connected',`Wallet: ${short(state.wallet.address)}`); return; }
-  // Directly try MetaMask first
-  if (typeof window.ethereum !== 'undefined') {
-    await ARC.wallet.connectMetaMask();
-  } else {
-    // Show modal for options
-    $('#walletModal').classList.remove('hidden');
+  if (typeof window.ethereum === 'undefined') {
+    ARC.ui.toast('error','MetaMask Not Found','Please install MetaMask');
+    window.open('https://metamask.io/download/', '_blank');
+    return;
   }
+  if (typeof ethers === 'undefined') {
+    ARC.ui.toast('error','Loading...','ethers.js is still loading. Try again in a moment.');
+    return;
+  }
+  await ARC.wallet.connectMetaMask();
 };
 ARC.wallet.closeModal = () => $('#walletModal').classList.add('hidden');
 
@@ -96,6 +99,8 @@ ARC.wallet.connectMetaMask = async () => {
     state.wallet = { connected: true, address, balance, provider, signer, chainId: network.chainId };
     ARC.wallet._updateUI();
     ARC.ui.toast('success','Wallet Connected',`${short(address)} on Chain ${network.chainId}`);
+    // Load token list
+    ARC.wallet._loadTokens();
     // Listen for changes
     window.ethereum.on('accountsChanged', (accs) => {
       if (accs.length === 0) { ARC.wallet.disconnect(); }
@@ -108,6 +113,25 @@ ARC.wallet.connectMetaMask = async () => {
     } else {
       ARC.ui.toast('error','Connection Failed', e.message || 'Unknown error');
     }
+  }
+};
+
+// Load ERC-20 tokens from wallet
+ARC.wallet._loadTokens = async () => {
+  const select = $('#sendToken');
+  select.innerHTML = '<option value="native">ETH (Native) — ' + parseFloat(state.wallet.balance).toFixed(4) + '</option>';
+  // Common testnet tokens on Arbitrum Sepolia
+  const tokens = [
+    { symbol: 'USDC', address: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d', decimals: 6 },
+    { symbol: 'USDT', address: '0x3870546cfd600aeb1749B4F7b12f0B5A46d9C1a7', decimals: 6 },
+  ];
+  for (const token of tokens) {
+    try {
+      const contract = new ethers.Contract(token.address, ['function balanceOf(address) view returns (uint256)'], state.wallet.provider);
+      const bal = await contract.balanceOf(state.wallet.address);
+      const formatted = ethers.utils.formatUnits(bal, token.decimals);
+      select.innerHTML += `<option value="${token.address}" data-decimals="${token.decimals}" data-symbol="${token.symbol}">${token.symbol} — ${parseFloat(formatted).toFixed(4)}</option>`;
+    } catch(e) { /* token may not exist on this chain */ }
   }
 };
 
@@ -150,13 +174,16 @@ ARC.send.max = () => {
 
 ARC.send.execute = async () => {
   if (!state.wallet.connected) { ARC.ui.toast('error','Wallet Required','Connect wallet first'); return; }
+  if (!state.wallet.signer) { ARC.ui.toast('error','No Signer','Please reconnect wallet'); return; }
   const addr = $('#sendAddr').value.trim();
   const amt = parseFloat($('#sendAmt').value);
+  const tokenSelect = $('#sendToken');
+  const tokenValue = tokenSelect.value;
   // Validate
   $('#sendAddrErr').classList.add('hidden');
   $('#sendAmtErr').classList.add('hidden');
   if (!isAddr(addr)) { $('#sendAddrErr').classList.remove('hidden'); return; }
-  if (!amt || amt <= 0 || amt > parseFloat(state.wallet.balance)) { $('#sendAmtErr').classList.remove('hidden'); return; }
+  if (!amt || amt <= 0) { $('#sendAmtErr').classList.remove('hidden'); return; }
   // Loading
   const btn = $('#sendBtn');
   btn.disabled = true;
@@ -165,8 +192,8 @@ ARC.send.execute = async () => {
 
   try {
     let txHash;
-    if (state.wallet.signer) {
-      // Real transaction via MetaMask
+    if (tokenValue === 'native') {
+      // Send native ETH
       const tx = await state.wallet.signer.sendTransaction({
         to: addr,
         value: ethers.utils.parseEther(amt.toString()),
@@ -174,22 +201,30 @@ ARC.send.execute = async () => {
       txHash = tx.hash;
       ARC.ui.toast('info','Transaction Pending',`Tx: ${short(txHash)}`);
       await tx.wait();
-      // Refresh balance
-      const bal = ethers.utils.formatEther(await state.wallet.provider.getBalance(state.wallet.address));
-      state.wallet.balance = bal;
     } else {
-      ARC.ui.toast('error','No Signer','Please reconnect your wallet');
-      btn.disabled = false;
-      btn.querySelector('.btn__text').classList.remove('hidden');
-      $('#sendLoader').classList.add('hidden');
-      return;
+      // Send ERC-20 token
+      const selectedOption = tokenSelect.options[tokenSelect.selectedIndex];
+      const decimals = parseInt(selectedOption.dataset.decimals) || 18;
+      const symbol = selectedOption.dataset.symbol || 'TOKEN';
+      const erc20ABI = ['function transfer(address to, uint256 amount) returns (bool)'];
+      const contract = new ethers.Contract(tokenValue, erc20ABI, state.wallet.signer);
+      const parsedAmount = ethers.utils.parseUnits(amt.toString(), decimals);
+      const tx = await contract.transfer(addr, parsedAmount);
+      txHash = tx.hash;
+      ARC.ui.toast('info',`Sending ${symbol}...`,`Tx: ${short(txHash)}`);
+      await tx.wait();
     }
+    // Refresh balance
+    const bal = ethers.utils.formatEther(await state.wallet.provider.getBalance(state.wallet.address));
+    state.wallet.balance = bal;
     // Add tx
-    ARC.activity.add({ hash: txHash, from: state.wallet.address, to: addr, value: amt.toFixed(4), time: Date.now(), status: 'ok' });
+    const symbol = tokenValue === 'native' ? 'ETH' : (tokenSelect.options[tokenSelect.selectedIndex].dataset.symbol || 'TOKEN');
+    ARC.activity.add({ hash: txHash, from: state.wallet.address, to: addr, value: amt.toFixed(4) + ' ' + symbol, time: Date.now(), status: 'ok' });
     state.stats.tx++;
     ARC.stats.render();
     ARC.wallet._updateUI();
-    ARC.ui.toast('success','Sent!',`${amt} ETH → ${short(addr)}`);
+    ARC.wallet._loadTokens();
+    ARC.ui.toast('success','Sent!',`${amt} ${symbol} → ${short(addr)}`);
     $('#sendAddr').value = '';
     $('#sendAmt').value = '';
   } catch(e) {

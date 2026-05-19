@@ -161,7 +161,11 @@
             <span class="input-error hidden" id="sendAddrErr">Invalid EVM address</span>
           </div>
           <div class="input-group">
-            <label class="input-label">Amount (ETH)</label>
+            <label class="input-label">Token</label>
+            <div class="input-wrap"><select id="sendToken" class="input-field" style="padding-right:16px;font-family:var(--font);cursor:pointer"><option value="native">ETH (Native)</option></select></div>
+          </div>
+          <div class="input-group">
+            <label class="input-label">Amount</label>
             <div class="input-wrap"><input type="number" id="sendAmt" class="input-field" placeholder="0.00" step="0.0001" min="0"><button class="input-action" onclick="ARC.send.max()">MAX</button></div>
             <span class="input-error hidden" id="sendAmtErr">Insufficient balance</span>
           </div>
@@ -301,7 +305,7 @@
 
 <!-- Scripts (CDN) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
