@@ -1,38 +1,38 @@
 # ARC Testnet Dashboard
 
-A premium futuristic crypto dashboard for the ARC Testnet platform. Built with modern web technologies featuring a cyberpunk aesthetic, glassmorphism design, and real-time blockchain monitoring.
+A premium, futuristic Web3 dashboard for the ARC Testnet platform. Built with production-grade quality featuring real blockchain connectivity, Three.js particle visuals, and an immersive cyberpunk UI.
 
 ## Features
 
-- **Wallet Connection** - MetaMask and WalletConnect support with live balance tracking
-- **Token Send** - Send testnet ARC tokens with address validation and transaction confirmation
-- **Faucet System** - Claim free testnet tokens with 24-hour cooldown protection
-- **Live Transactions** - Real-time transaction feed with auto-refresh
-- **Network Stats** - Animated dashboard statistics (TPS, wallets, volume)
-- **Particle Background** - Interactive mouse-reactive particle system
-- **Responsive Design** - Optimized for mobile, tablet, and desktop
-- **Dark Theme** - Premium dark UI with neon accent colors
+- **Real Wallet Connection** — MetaMask with auto chain-switch to Arbitrum Sepolia (421614)
+- **Live Token Sending** — Real ethers.js transactions with validation and error handling
+- **Faucet System** — Claim testnet ETH with 24h cooldown (Circle Faucet integration-ready)
+- **Live Activity Feed** — Real-time transaction stream with animated entries
+- **RPC Connected** — Fetches real block height and gas prices from Arbitrum Sepolia
+- **Three.js Particles** — Mouse-reactive 3D particle system with connecting lines
+- **Canvas Analytics** — Animated TPS chart with bezier curves
+- **Glassmorphism UI** — Aurora blobs, floating navbar, animated borders, glow effects
+- **Fully Responsive** — Mobile, tablet, and desktop optimized
 
-## Tech Stack
+## Tech
 
-- Vanilla JavaScript (ES6+)
-- CSS3 with custom properties, animations, and glassmorphism
-- Canvas API for particle effects
-- Web3 API integration (MetaMask/EIP-1193)
+- Vanilla JS (ES6+) with modular architecture
+- Three.js r128 (CDN)
+- ethers.js v5.7 (CDN)
+- Custom CSS with 20+ animations
+- Canvas 2D API for charts
 - LocalStorage for state persistence
 
-## Getting Started
+## Quick Start
 
-Simply open `public/index.html` in a browser, or serve the `public` directory with any static file server.
+Open `public/index.html` in any browser. No build step required.
 
-## Structure
+## Network
 
-```
-public/
-  index.html          - Main HTML document
-  styles/main.css     - All styles (dark theme, animations, responsive)
-  scripts/app.js      - Application logic (wallet, faucet, transactions)
-```
+- **Chain**: Arbitrum Sepolia
+- **Chain ID**: 421614
+- **RPC**: `https://sepolia-rollup.arbitrum.io/rpc`
+- **Explorer**: `https://sepolia.arbiscan.io`
 
 ## License
 
