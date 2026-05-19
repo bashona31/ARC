@@ -63,55 +63,55 @@ ARC.ui.toast = (type, title, msg) => {
 };
 
 // ═══ WALLET ═══
-ARC.wallet.connect = () => {
+ARC.wallet.connect = async () => {
   if (state.wallet.connected) { ARC.ui.toast('info','Already Connected',`Wallet: ${short(state.wallet.address)}`); return; }
-  $('#walletModal').classList.remove('hidden');
+  // Directly try MetaMask first
+  if (typeof window.ethereum !== 'undefined') {
+    await ARC.wallet.connectMetaMask();
+  } else {
+    // Show modal for options
+    $('#walletModal').classList.remove('hidden');
+  }
 };
 ARC.wallet.closeModal = () => $('#walletModal').classList.add('hidden');
 
 ARC.wallet.connectMetaMask = async () => {
   ARC.wallet.closeModal();
   if (typeof window.ethereum === 'undefined') {
-    // Demo mode
-    ARC.wallet._demo();
+    ARC.ui.toast('error','MetaMask Not Found','Please install MetaMask browser extension');
+    window.open('https://metamask.io/download/', '_blank');
     return;
   }
   try {
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const network = await provider.getNetwork();
-    // Switch chain if needed
-    if (network.chainId !== CONFIG.chainId) {
-      try {
-        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CONFIG.chainHex }] });
-      } catch (e) {
-        if (e.code === 4902) {
-          await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [{ chainId: CONFIG.chainHex, chainName: CONFIG.chainName, rpcUrls: [CONFIG.rpc], nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 } }] });
-        }
-      }
+    if (!accounts || accounts.length === 0) {
+      ARC.ui.toast('error','No Account','No accounts found');
+      return;
     }
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
     const signer = provider.getSigner();
     const address = await signer.getAddress();
     const balance = ethers.utils.formatEther(await provider.getBalance(address));
-    state.wallet = { connected: true, address, balance, provider, signer };
+    const network = await provider.getNetwork();
+    state.wallet = { connected: true, address, balance, provider, signer, chainId: network.chainId };
     ARC.wallet._updateUI();
-    ARC.ui.toast('success','Connected',`Wallet: ${short(address)}`);
+    ARC.ui.toast('success','Wallet Connected',`${short(address)} on Chain ${network.chainId}`);
     // Listen for changes
-    window.ethereum.on('accountsChanged', () => location.reload());
+    window.ethereum.on('accountsChanged', (accs) => {
+      if (accs.length === 0) { ARC.wallet.disconnect(); }
+      else { location.reload(); }
+    });
     window.ethereum.on('chainChanged', () => location.reload());
   } catch (e) {
-    ARC.ui.toast('error','Connection Failed', e.message || 'Rejected');
+    if (e.code === 4001) {
+      ARC.ui.toast('error','Rejected','You rejected the connection request');
+    } else {
+      ARC.ui.toast('error','Connection Failed', e.message || 'Unknown error');
+    }
   }
 };
 
-ARC.wallet.connectWC = () => { ARC.wallet.closeModal(); ARC.wallet._demo(); };
-
-ARC.wallet._demo = () => {
-  const addr = randHex(20);
-  state.wallet = { connected: true, address: addr, balance: (Math.random()*5+0.5).toFixed(4), provider: null, signer: null };
-  ARC.wallet._updateUI();
-  ARC.ui.toast('success','Demo Connected',`Wallet: ${short(addr)}`);
-};
+ARC.wallet.connectWC = () => { ARC.wallet.closeModal(); ARC.ui.toast('info','WalletConnect','Please use MetaMask for now'); };
 
 ARC.wallet.disconnect = () => {
   state.wallet = { connected: false, address: null, balance: '0', provider: null, signer: null };
@@ -166,22 +166,23 @@ ARC.send.execute = async () => {
   try {
     let txHash;
     if (state.wallet.signer) {
-      // Real transaction
+      // Real transaction via MetaMask
       const tx = await state.wallet.signer.sendTransaction({
         to: addr,
         value: ethers.utils.parseEther(amt.toString()),
       });
       txHash = tx.hash;
-      ARC.ui.toast('info','Tx Pending',`Hash: ${short(txHash)}`);
+      ARC.ui.toast('info','Transaction Pending',`Tx: ${short(txHash)}`);
       await tx.wait();
       // Refresh balance
       const bal = ethers.utils.formatEther(await state.wallet.provider.getBalance(state.wallet.address));
       state.wallet.balance = bal;
     } else {
-      // Demo mode
-      await wait(2200);
-      txHash = randHex(32);
-      state.wallet.balance = (parseFloat(state.wallet.balance) - amt - 0.000021).toFixed(4);
+      ARC.ui.toast('error','No Signer','Please reconnect your wallet');
+      btn.disabled = false;
+      btn.querySelector('.btn__text').classList.remove('hidden');
+      $('#sendLoader').classList.add('hidden');
+      return;
     }
     // Add tx
     ARC.activity.add({ hash: txHash, from: state.wallet.address, to: addr, value: amt.toFixed(4), time: Date.now(), status: 'ok' });
@@ -570,12 +571,13 @@ document.addEventListener('DOMContentLoaded', () => {
   ARC.ui.initNav();
   // Scroll animations
   ARC.ui.initObserver();
-  // Load saved state
-  const saved = localStorage.getItem('arc_wallet');
-  if (saved) {
-    const d = JSON.parse(saved);
-    state.wallet = { connected: true, address: d.address, balance: d.balance, provider: null, signer: null };
-    ARC.wallet._updateUI();
+  // Load saved state - try to reconnect if MetaMask available
+  if (typeof window.ethereum !== 'undefined') {
+    window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+      if (accounts && accounts.length > 0) {
+        ARC.wallet.connectMetaMask();
+      }
+    }).catch(() => {});
   }
   const savedFaucet = localStorage.getItem('arc_faucet');
   if (savedFaucet) {
